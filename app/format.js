@@ -1,70 +1,36 @@
-// Small helpers for showing API values.
+// Display conversions shared by the route renderers.
+const missing = '—';
+const numeric = (input, render) => {
+  const value = Number(input);
+  return Number.isFinite(value) ? render(value) : missing;
+};
+const utc = (input, options) => input
+  ? new Date(input).toLocaleString('en-US', { ...options, timeZone: 'UTC' })
+  : missing;
 
-/** Text made safe to put inside HTML. */
-export function esc(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+export const esc = (input) => String(input ?? '').replace(/[&<>"']/g,
+  character => '&#' + character.charCodeAt(0) + ';');
+export const num = (input) => numeric(input, value => value.toLocaleString('en-US'));
+export const money = (input) => numeric(input, value => value.toLocaleString('en-US', {
+  currency: 'USD', style: 'currency', minimumFractionDigits: value % 1 === 0 ? 0 : 2,
+}));
+export const microPct = (input) => numeric(input, value => (value / 1e4).toFixed(2) + '%');
+export const microMoney = (input) => numeric(input, value => money(value / 1e6));
+export const day = (input) => utc(input, { dateStyle: 'medium' });
+export const date = (input) => input
+  ? utc(input, { dateStyle: 'medium', timeStyle: 'short' }) + ' UTC' : missing;
+export const hasEnded = (input) => !input || Number(new Date(input)) <= Date.now();
+export function shortAddr(input) {
+  const address = String(input ?? '');
+  return address.length <= 12 ? address : address.substring(0, 6) + '…' + address.slice(-4);
 }
-
-/** A dollar amount ('1000.00', 0.5, or '511.50') as '$1,000' or '$0.50'. */
-export function money(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return '—';
-  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: Number.isInteger(n) ? 0 : 2 });
-}
-
-/** A micro-unit amount (micro-USDC, or a judge win rate in micro units). */
-export function microMoney(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return '—';
-  return money(n / 1000000);
-}
-
-/** A judge win rate in micro units (973639) as a percent ('97.36%'). */
-export function microPct(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return '—';
-  return `${(n / 10000).toFixed(2)}%`;
-}
-
-/** A whole number with thousands separators. */
-export function num(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n.toLocaleString('en-US') : '—';
-}
-
-/** A deadline as a date in UTC. */
-export function date(iso) {
-  if (!iso) return '—';
-  return `${new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC`;
-}
-
-/** A past date as 'Nov 12, 2026'. */
-export function day(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeZone: 'UTC' });
-}
-
-/** The time until a deadline: '2d 4h left', '35m left', or 'ended'. */
-export function timeLeft(iso) {
-  const ms = new Date(iso).getTime() - Date.now();
-  if (ms <= 0) return 'ended';
-  const days = Math.floor(ms / 86400000);
-  const hours = Math.floor((ms % 86400000) / 3600000);
-  const minutes = Math.floor((ms % 3600000) / 60000);
-  if (days > 0) return `${days}d ${hours}h left`;
-  if (hours > 0) return `${hours}h ${minutes}m left`;
-  return `${minutes}m left`;
-}
-
-/** True when the deadline has passed: the bounty takes no more entries,
- *  whatever its status still says (a bounty past its deadline may still
- *  read status open until its results are published). */
-export function hasEnded(iso) {
-  return !iso || new Date(iso).getTime() <= Date.now();
-}
-
-/** A wallet address shortened for display. */
-export function shortAddr(addr) {
-  const s = String(addr ?? '');
-  return s.length > 12 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s;
+export function timeLeft(input) {
+  const remaining = new Date(input).getTime() - Date.now();
+  if (remaining <= 0) return 'ended';
+  const units = [86400000, 3600000, 60000];
+  const parts = units.map((unit, index) => Math.floor(
+    (index ? remaining % units[index - 1] : remaining) / unit));
+  if (parts[0] > 0) return parts[0] + 'd ' + parts[1] + 'h left';
+  if (parts[1] > 0) return parts[1] + 'h ' + parts[2] + 'm left';
+  return parts[2] + 'm left';
 }

@@ -1,214 +1,166 @@
-// A make.fun frontend: the board, a bounty page, its leaderboard and an
-// account's public profile, on hash routes.
-//
-//   #/                          the board
-//   #/bounty/<slug>             one bounty
-//   #/bounty/<slug>/leaderboard that bounty's leaderboard (?view=overall|performance)
-//   #/profile/<handle>          an account's public profile
-//
-// window.__shotReady is false while a page loads and true once its data is
-// on screen, so a screenshot script knows when to capture.
+import * as api from './api.js';
+import * as view from './views.js';
+import { money, hasEnded } from './format.js';
 
-import { getBounties, getBounty, getLeaderboard, getProfile } from './api.js';
-import { boardRow, boardShell, bounty, errorView, lbRow, leaderboard, notFoundView, profile, solutionRow } from './views.js';
-import { hasEnded, money } from './format.js';
-
-const app = document.getElementById('app');
-const PAGE = 25;
-const SOL_PAGE = 10;
-
-let boardItems = [];
-let boardState = { q: '', cat: 'all', sort: 'deadline', st: 'all' };
-let pageRows = null; // { rows, cols, shown } for the leaderboard "Show more" button
-let pageSols = null; // { sols, shown } for the profile "Show more" button
+const root = document.getElementById('app');
+const PAGE = 25, SOL_PAGE = 10;
+const boardState = { q: '', cat: 'all', sort: 'deadline', st: 'all' };
+let inventory = [];
 let routeVersion = 0;
+const element = id => document.getElementById(id);
+const pot = item => Number(item.potUsd ?? item.rewardAmount ?? 0) || 0;
+const timestamp = value => new Date(value).getTime();
 
-function setReady() {
-  window.__shotReady = true;
-}
-
-/** Let the page's images (e.g. a profile avatar) finish loading — or 5 s,
- *  whichever comes first — before signalling that a screenshot may be taken. */
-function waitForImages() {
-  const pending = [...document.images].filter((img) => !img.complete);
-  if (!pending.length) return Promise.resolve();
-  return Promise.race([
-    Promise.all(pending.map((img) => new Promise((r) => {
-      img.addEventListener('load', r, { once: true });
-      img.addEventListener('error', r, { once: true });
-    }))),
-    new Promise((r) => setTimeout(r, 5000)),
-  ]);
-}
-
-function potOf(b) {
-  return Number(b.potUsd ?? b.rewardAmount ?? 0) || 0;
-}
-
-function filteredBoard() {
-  const q = boardState.q.trim().toLowerCase();
-  let list = boardItems.filter((b) => {
-    if (boardState.cat !== 'all' && b.category !== boardState.cat) return false;
-    if (q) {
-      const hay = `${b.title || ''} ${b.slug || ''} ${b.category || ''} ${(b.skills || []).join(' ')}`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    const ended = hasEnded(b.deadline);
-    if (boardState.st === 'open' && ended) return false;
-    if (boardState.st === 'soon' && (ended || new Date(b.deadline).getTime() - Date.now() > 48 * 3600000)) return false;
-    if (boardState.st === 'ended' && !ended) return false;
-    return true;
+function updateBoard() {
+  const needle = boardState.q.trim().toLowerCase();
+  const selected = inventory.filter(item => {
+    const { cat, st } = boardState;
+    const closed = hasEnded(item.deadline);
+    const text = [item.title || '', item.slug || '', item.category || '', ...(item.skills || [])].join(' ').toLowerCase();
+    return (cat === 'all' || cat === item.category)
+      && (!needle || text.includes(needle))
+      && (st !== 'ended' || closed)
+      && (st !== 'open' || !closed)
+      && (st !== 'soon' || (!closed && !(timestamp(item.deadline) - Date.now() > 172800000)));
   });
-  const by = boardState.sort;
-  const openFirst = (a, b) => (hasEnded(a.deadline) - hasEnded(b.deadline)) || (new Date(a.deadline) - new Date(b.deadline));
-  if (by === 'deadline') list.sort(openFirst);
-  else if (by === 'pot') list.sort((a, b) => potOf(b) - potOf(a));
-  else if (by === 'entries') list.sort((a, b) => (b.submissionCount || 0) - (a.submissionCount || 0));
-  else if (by === 'newest') list.sort((a, b) => new Date(b.publishedAt || b.deadline) - new Date(a.publishedAt || a.deadline));
-  else if (by === 'title') list.sort((a, b) => String(a.title).localeCompare(String(b.title)));
-  return list;
+  const comparators = {
+    title: (a, b) => String(a.title).localeCompare(String(b.title)),
+    newest: (a, b) => timestamp(b.publishedAt || b.deadline) - timestamp(a.publishedAt || a.deadline),
+    entries: (a, b) => (b.submissionCount || 0) - (a.submissionCount || 0),
+    pot: (a, b) => pot(b) - pot(a),
+    deadline: (a, b) => Number(hasEnded(a.deadline)) - Number(hasEnded(b.deadline)) || timestamp(a.deadline) - timestamp(b.deadline),
+  };
+  if (comparators[boardState.sort]) selected.sort(comparators[boardState.sort]);
+  element('board-list').innerHTML = selected.length ? selected.map(view.boardRow).join('') : '<li>No bounties match these filters.</li>';
+  element('board-count').textContent = `${selected.length} of ${inventory.length} bounties · ${money(selected.reduce((total, item) => total + pot(item), 0))} total live pot`;
 }
 
-/** Re-render only the board list and its count, keeping the search box focused. */
-function renderBoardList() {
-  const listEl = document.getElementById('board-list');
-  const countEl = document.getElementById('board-count');
-  if (!listEl) return;
-  const list = filteredBoard();
-  const totalPot = list.reduce((s, b) => s + potOf(b), 0);
-  listEl.innerHTML = list.length
-    ? list.map(boardRow).join('')
-    : '<li>No bounties match these filters.</li>';
-  if (countEl) {
-    countEl.textContent = `${list.length} of ${boardItems.length} bounties · ${money(totalPot)} total live pot`;
+function connectBoard(data) {
+  inventory = data.items || [];
+  root.innerHTML = view.boardShell(Array.from(new Set(inventory.map(item => item.category).filter(Boolean))).sort());
+  for (const key of ['q', 'cat', 'sort']) {
+    const input = element(key);
+    input.value = boardState[key];
+    if (key === 'cat' && input.value !== boardState.cat) input.value = boardState.cat = 'all';
+    input.addEventListener(key === 'q' ? 'input' : 'change', () => {
+      boardState[key] = input.value;
+      updateBoard();
+    });
   }
-}
-
-async function renderBoard(version) {
-  const data = await getBounties();
-  if (version !== routeVersion) return;
-  document.title = 'make.fun bounties';
-  boardItems = data.items || [];
-  const categories = [...new Set(boardItems.map((b) => b.category).filter(Boolean))].sort();
-  app.innerHTML = boardShell(categories);
-  const q = document.getElementById('q');
-  const cat = document.getElementById('cat');
-  const sort = document.getElementById('sort');
-  q.value = boardState.q;
-  cat.value = boardState.cat;
-  if (cat.value !== boardState.cat) cat.value = boardState.cat = 'all';
-  sort.value = boardState.sort;
   document.querySelector(`input[name="st"][value="${boardState.st}"]`).checked = true;
-  document.getElementById('board-controls').addEventListener('submit', (ev) => ev.preventDefault());
-  q.addEventListener('input', () => {
-    boardState.q = q.value;
-    renderBoardList();
+  element('status-chips').addEventListener('change', event => {
+    boardState.st = event.target.value;
+    updateBoard();
   });
-  cat.addEventListener('change', () => {
-    boardState.cat = cat.value;
-    renderBoardList();
-  });
-  sort.addEventListener('change', () => {
-    boardState.sort = sort.value;
-    renderBoardList();
-  });
-  document.getElementById('status-chips').addEventListener('change', (ev) => {
-    boardState.st = ev.target.value;
-    renderBoardList();
-  });
-  renderBoardList();
+  element('board-controls').addEventListener('submit', event => event.preventDefault());
+  updateBoard();
 }
 
-async function renderBounty(slug, version) {
-  const b = await getBounty(slug);
-  if (version !== routeVersion) return;
-  document.title = `${b.title} | make.fun bounties`;
-  app.innerHTML = bounty(b);
+function connectPages(prefix, records, size, draw, noun) {
+  const button = element(prefix + '-more');
+  if (!button) return;
+  let offset = Math.min(size, records.length);
+  button.addEventListener('click', () => {
+    const batch = records.slice(offset, offset + size);
+    element(prefix + '-body').insertAdjacentHTML('beforeend', batch.map(draw).join(''));
+    offset += batch.length;
+    const count = element(prefix + '-count');
+    if (count) count.textContent = `${offset} of ${records.length} ${noun} shown.`;
+    if (offset === records.length) button.remove();
+  });
 }
 
-async function renderLeaderboard(slug, view, version) {
-  const lb = await getLeaderboard(slug, view);
-  if (version !== routeVersion) return;
-  document.title = `Leaderboard: ${lb.competition?.title || slug} | make.fun bounties`;
-  app.innerHTML = leaderboard(slug, lb);
-  const cols = (lb.columns || []).filter((c) => !c.hidden).sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
-  const rows = [...(lb.entries || []), ...(lb.rest || [])];
-  pageRows = { rows, cols, shown: Math.min(PAGE, rows.length) };
-  const more = document.getElementById('lb-more');
-  if (more) {
-    more.addEventListener('click', () => {
-      const body = document.getElementById('lb-body');
-      const count = document.getElementById('lb-count');
-      const next = pageRows.rows.slice(pageRows.shown, pageRows.shown + PAGE);
-      body.insertAdjacentHTML('beforeend', next.map((e) => lbRow(e, pageRows.cols)).join(''));
-      pageRows.shown += next.length;
-      if (count) count.textContent = `${pageRows.shown} of ${pageRows.rows.length} rows shown.`;
-      if (pageRows.shown >= pageRows.rows.length) more.remove();
-    });
+function resolveRoute() {
+  const [path, search] = location.hash.replace(/^#/, '').split('?');
+  if (!path || path === '/') return { kind: 'board' };
+  const parts = path.match(/^\/(bounty|profile|u|account)\/([^/]+)(\/leaderboard)?$/);
+  if (!parts || (parts[3] && parts[1] !== 'bounty')) return { kind: 'missing' };
+  return {
+    kind: parts[1] === 'bounty' ? (parts[3] ? 'leaderboard' : 'bounty') : 'profile',
+    name: decodeURIComponent(parts[2]),
+    mode: new URLSearchParams(search || '').get('view'),
+  };
+}
+
+async function loadRoute(route) {
+  switch (route.kind) {
+    case 'board': return api.getBounties();
+    case 'bounty': return api.getBounty(route.name);
+    case 'profile': return api.getProfile(route.name);
+    case 'leaderboard': return api.getLeaderboard(route.name, route.mode);
   }
 }
 
-async function renderProfile(handle, version) {
-  const { profile: p, current } = await getProfile(handle);
-  if (version !== routeVersion) return;
-  document.title = `@${current} | make.fun bounties`;
-  app.innerHTML = profile(current, p, handle);
-  const sols = Array.isArray(p.solutions) ? p.solutions : [];
-  pageSols = { sols, shown: Math.min(SOL_PAGE, sols.length) };
-  const more = document.getElementById('sol-more');
-  if (more) {
-    more.addEventListener('click', () => {
-      const body = document.getElementById('sol-body');
-      const count = document.getElementById('sol-count');
-      const next = pageSols.sols.slice(pageSols.shown, pageSols.shown + SOL_PAGE);
-      body.insertAdjacentHTML('beforeend', next.map(solutionRow).join(''));
-      pageSols.shown += next.length;
-      if (count) count.textContent = `${pageSols.shown} of ${pageSols.sols.length} entries shown.`;
-      if (pageSols.shown >= pageSols.sols.length) more.remove();
-    });
+function display(route, data) {
+  let title;
+  switch (route.kind) {
+    case 'board':
+      title = 'make.fun bounties';
+      connectBoard(data);
+      break;
+    case 'bounty':
+      title = `${data.title} | make.fun bounties`;
+      root.innerHTML = view.bounty(data);
+      break;
+    case 'profile': {
+      title = `@${data.current} | make.fun bounties`;
+      root.innerHTML = view.profile(data.current, data.profile, route.name);
+      const solutions = Array.isArray(data.profile.solutions) ? data.profile.solutions : [];
+      connectPages('sol', solutions, SOL_PAGE, view.solutionRow, 'entries');
+      break;
+    }
+    case 'leaderboard': {
+      title = `Leaderboard: ${data.competition?.title || route.name} | make.fun bounties`;
+      root.innerHTML = view.leaderboard(route.name, data);
+      const columns = (data.columns || []).filter(column => !column.hidden).sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+      connectPages('lb', [...(data.entries || []), ...(data.rest || [])], PAGE, row => view.lbRow(row, columns), 'rows');
+      break;
+    }
+    default:
+      title = 'Not found | make.fun bounties';
+      root.innerHTML = view.notFoundView('That route does not exist.');
   }
+  document.title = title;
 }
 
-async function render() {
+function waitForImages() {
+  const images = Array.from(document.images).filter(image => !image.complete);
+  if (!images.length) return Promise.resolve();
+  return new Promise(resolve => {
+    let remaining = images.length;
+    const timer = setTimeout(resolve, 5000);
+    const finished = () => {
+      if (--remaining === 0) { clearTimeout(timer); resolve(); }
+    };
+    images.forEach(image => {
+      image.addEventListener('load', finished, { once: true });
+      image.addEventListener('error', finished, { once: true });
+    });
+  });
+}
+
+async function navigate() {
   const version = ++routeVersion;
   window.__shotReady = false;
-  pageRows = null;
-  pageSols = null;
-  app.innerHTML = '<p>Loading…</p>';
-  const hash = location.hash.replace(/^#/, '');
-  const [pathPart, queryPart] = hash.split('?');
-  const query = new URLSearchParams(queryPart || '');
+  root.innerHTML = '<p>Loading…</p>';
   try {
-    const lbMatch = pathPart.match(/^\/bounty\/([^/]+)\/leaderboard$/);
-    const bMatch = pathPart.match(/^\/bounty\/([^/]+)$/);
-    const pMatch = pathPart.match(/^\/(?:profile|u|account)\/([^/]+)$/);
-    if (lbMatch) {
-      await renderLeaderboard(decodeURIComponent(lbMatch[1]), query.get('view'), version);
-    } else if (bMatch) {
-      await renderBounty(decodeURIComponent(bMatch[1]), version);
-    } else if (pMatch) {
-      await renderProfile(decodeURIComponent(pMatch[1]), version);
-    } else if (!pathPart || pathPart === '/') {
-      await renderBoard(version);
-    } else {
-      document.title = 'Not found | make.fun bounties';
-      app.innerHTML = notFoundView('That route does not exist.');
-    }
-  } catch (err) {
+    const route = resolveRoute();
+    const data = await loadRoute(route);
     if (version !== routeVersion) return;
-    if (err && err.status === 404) {
-      document.title = 'Not found | make.fun bounties';
-      app.innerHTML = notFoundView('That bounty, leaderboard or profile does not exist, or it is not public.');
-    } else {
-      document.title = 'Error | make.fun bounties';
-      app.innerHTML = errorView(err && err.message ? err.message : 'Could not load data from make.fun. Check your connection and try again.');
-    }
+    display(route, data);
+  } catch (failure) {
+    if (version !== routeVersion) return;
+    const missing = failure?.status === 404;
+    document.title = `${missing ? 'Not found' : 'Error'} | make.fun bounties`;
+    root.innerHTML = missing
+      ? view.notFoundView('That bounty, leaderboard or profile does not exist, or it is not public.')
+      : view.errorView(failure?.message || 'Could not load data from make.fun. Check your connection and try again.');
   }
   if (version !== routeVersion) return;
   window.scrollTo(0, 0);
   await waitForImages();
-  if (version === routeVersion) setReady();
+  if (version === routeVersion) window.__shotReady = true;
 }
 
-window.addEventListener('hashchange', render);
-render();
+window.addEventListener('hashchange', navigate);
+navigate();
