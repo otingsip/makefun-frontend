@@ -1,166 +1,72 @@
 import * as api from './api.js';
-import * as view from './views.js';
+import * as views from './views.js';
 import { money, hasEnded } from './format.js';
 
-const root = document.getElementById('app');
-const PAGE = 25, SOL_PAGE = 10;
-const boardState = { q: '', cat: 'all', sort: 'deadline', st: 'all' };
-let inventory = [];
-let routeVersion = 0;
-const element = id => document.getElementById(id);
+const app = document.getElementById('app'), PAGE = 25, SOL_PAGE = 10;
+const state = { q: '', cat: 'all', sort: 'deadline', st: 'all' };
+let items = [], version = 0;
+const $ = id => document.getElementById(id), ms = value => new Date(value).getTime();
 const pot = item => Number(item.potUsd ?? item.rewardAmount ?? 0) || 0;
-const timestamp = value => new Date(value).getTime();
 
-function updateBoard() {
-  const needle = boardState.q.trim().toLowerCase();
-  const selected = inventory.filter(item => {
-    const { cat, st } = boardState;
-    const closed = hasEnded(item.deadline);
-    const text = [item.title || '', item.slug || '', item.category || '', ...(item.skills || [])].join(' ').toLowerCase();
-    return (cat === 'all' || cat === item.category)
-      && (!needle || text.includes(needle))
-      && (st !== 'ended' || closed)
-      && (st !== 'open' || !closed)
-      && (st !== 'soon' || (!closed && !(timestamp(item.deadline) - Date.now() > 172800000)));
+function boardItems() {
+  const q = state.q.trim().toLowerCase();
+  const found = items.filter(item => {
+    const ended = hasEnded(item.deadline), soon = !ended && ms(item.deadline) - Date.now() <= 172800000;
+    const text = [item.title, item.slug, item.category, ...(item.skills || [])].filter(Boolean).join(' ').toLowerCase();
+    return (state.cat === 'all' || item.category === state.cat) && (!q || text.includes(q)) && (state.st === 'all' || state.st === 'ended' && ended || state.st === 'open' && !ended || state.st === 'soon' && soon);
   });
-  const comparators = {
-    title: (a, b) => String(a.title).localeCompare(String(b.title)),
-    newest: (a, b) => timestamp(b.publishedAt || b.deadline) - timestamp(a.publishedAt || a.deadline),
-    entries: (a, b) => (b.submissionCount || 0) - (a.submissionCount || 0),
-    pot: (a, b) => pot(b) - pot(a),
-    deadline: (a, b) => Number(hasEnded(a.deadline)) - Number(hasEnded(b.deadline)) || timestamp(a.deadline) - timestamp(b.deadline),
+  const sort = {
+    deadline: (a, b) => Number(hasEnded(a.deadline)) - Number(hasEnded(b.deadline)) || ms(a.deadline) - ms(b.deadline),
+    pot: (a, b) => pot(b) - pot(a), entries: (a, b) => (b.submissionCount || 0) - (a.submissionCount || 0),
+    newest: (a, b) => ms(b.publishedAt || b.deadline) - ms(a.publishedAt || a.deadline), title: (a, b) => String(a.title).localeCompare(String(b.title))
   };
-  if (comparators[boardState.sort]) selected.sort(comparators[boardState.sort]);
-  element('board-list').innerHTML = selected.length ? selected.map(view.boardRow).join('') : '<li>No bounties match these filters.</li>';
-  element('board-count').textContent = `${selected.length} of ${inventory.length} bounties · ${money(selected.reduce((total, item) => total + pot(item), 0))} total live pot`;
+  found.sort(sort[state.sort] || sort.deadline); return found;
 }
-
-function connectBoard(data) {
-  inventory = data.items || [];
-  root.innerHTML = view.boardShell(Array.from(new Set(inventory.map(item => item.category).filter(Boolean))).sort());
-  for (const key of ['q', 'cat', 'sort']) {
-    const input = element(key);
-    input.value = boardState[key];
-    if (key === 'cat' && input.value !== boardState.cat) input.value = boardState.cat = 'all';
-    input.addEventListener(key === 'q' ? 'input' : 'change', () => {
-      boardState[key] = input.value;
-      updateBoard();
-    });
-  }
-  document.querySelector(`input[name="st"][value="${boardState.st}"]`).checked = true;
-  element('status-chips').addEventListener('change', event => {
-    boardState.st = event.target.value;
-    updateBoard();
-  });
-  element('board-controls').addEventListener('submit', event => event.preventDefault());
-  updateBoard();
+function refreshBoard() {
+  const rows = boardItems();
+  $('board-list').innerHTML = rows.length ? rows.map(views.boardRow).join('') : '<li>No bounties match these filters.</li>';
+  $('board-count').textContent = `${rows.length} of ${items.length} bounties · ${money(rows.reduce((n, x) => n + pot(x), 0))} total live pot`;
 }
-
-function connectPages(prefix, records, size, draw, noun) {
-  const button = element(prefix + '-more');
-  if (!button) return;
-  let offset = Math.min(size, records.length);
-  button.addEventListener('click', () => {
-    const batch = records.slice(offset, offset + size);
-    element(prefix + '-body').insertAdjacentHTML('beforeend', batch.map(draw).join(''));
-    offset += batch.length;
-    const count = element(prefix + '-count');
-    if (count) count.textContent = `${offset} of ${records.length} ${noun} shown.`;
-    if (offset === records.length) button.remove();
-  });
+function setupBoard(data) {
+  items = data.items || [];
+  app.innerHTML = views.boardShell([...new Set(items.map(x => x.category).filter(Boolean))].sort());
+  ['q', 'cat', 'sort'].forEach(id => { const control = $(id); control.value = state[id]; if (id === 'cat' && !control.value) control.value = state.cat = 'all'; control.addEventListener(id === 'q' ? 'input' : 'change', () => { state[id] = control.value; refreshBoard(); }); });
+  const selected = document.querySelector(`input[name="st"][value="${state.st}"]`); if (selected) selected.checked = true;
+  $('status-chips').addEventListener('change', event => { state.st = event.target.value; refreshBoard(); });
+  $('board-controls').addEventListener('submit', event => event.preventDefault()); refreshBoard();
 }
-
-function resolveRoute() {
-  const [path, search] = location.hash.replace(/^#/, '').split('?');
-  if (!path || path === '/') return { kind: 'board' };
-  const parts = path.match(/^\/(bounty|profile|u|account)\/([^/]+)(\/leaderboard)?$/);
-  if (!parts || (parts[3] && parts[1] !== 'bounty')) return { kind: 'missing' };
-  return {
-    kind: parts[1] === 'bounty' ? (parts[3] ? 'leaderboard' : 'bounty') : 'profile',
-    name: decodeURIComponent(parts[2]),
-    mode: new URLSearchParams(search || '').get('view'),
-  };
+function pages(prefix, rows, size, render, noun) {
+  const more = $(`${prefix}-more`); if (!more) return;
+  let shown = Math.min(size, rows.length);
+  const update = () => { const count = $(`${prefix}-count`); if (count) count.textContent = `${shown} of ${rows.length} ${noun} shown.`; if (shown >= rows.length) more.remove(); };
+  more.addEventListener('click', () => { const next = rows.slice(shown, shown + size); $(`${prefix}-body`).insertAdjacentHTML('beforeend', next.map(render).join('')); shown += next.length; update(); });
 }
-
-async function loadRoute(route) {
-  switch (route.kind) {
-    case 'board': return api.getBounties();
-    case 'bounty': return api.getBounty(route.name);
-    case 'profile': return api.getProfile(route.name);
-    case 'leaderboard': return api.getLeaderboard(route.name, route.mode);
-  }
+function parseRoute() {
+  const [path, query = ''] = location.hash.slice(1).split('?');
+  if (!path || path === '/') return { type: 'board' };
+  const match = path.match(/^\/(bounty|profile|u|account)\/([^/]+)(\/leaderboard)?$/);
+  if (!match || (match[3] && match[1] !== 'bounty')) return { type: 'missing' };
+  return { type: match[3] ? 'leaderboard' : match[1] === 'bounty' ? 'bounty' : 'profile', name: decodeURIComponent(match[2]), view: new URLSearchParams(query).get('view') };
 }
-
-function display(route, data) {
-  let title;
-  switch (route.kind) {
-    case 'board':
-      title = 'make.fun bounties';
-      connectBoard(data);
-      break;
-    case 'bounty':
-      title = `${data.title} | make.fun bounties`;
-      root.innerHTML = view.bounty(data);
-      break;
-    case 'profile': {
-      title = `@${data.current} | make.fun bounties`;
-      root.innerHTML = view.profile(data.current, data.profile, route.name);
-      const solutions = Array.isArray(data.profile.solutions) ? data.profile.solutions : [];
-      connectPages('sol', solutions, SOL_PAGE, view.solutionRow, 'entries');
-      break;
-    }
-    case 'leaderboard': {
-      title = `Leaderboard: ${data.competition?.title || route.name} | make.fun bounties`;
-      root.innerHTML = view.leaderboard(route.name, data);
-      const columns = (data.columns || []).filter(column => !column.hidden).sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
-      connectPages('lb', [...(data.entries || []), ...(data.rest || [])], PAGE, row => view.lbRow(row, columns), 'rows');
-      break;
-    }
-    default:
-      title = 'Not found | make.fun bounties';
-      root.innerHTML = view.notFoundView('That route does not exist.');
-  }
-  document.title = title;
+function load(route) {
+  if (route.type === 'board') return api.getBounties();
+  if (route.type === 'bounty') return api.getBounty(route.name);
+  if (route.type === 'leaderboard') return api.getLeaderboard(route.name, route.view);
+  if (route.type === 'profile') return api.getProfile(route.name);
+  return Promise.resolve(null);
 }
-
-function waitForImages() {
-  const images = Array.from(document.images).filter(image => !image.complete);
-  if (!images.length) return Promise.resolve();
-  return new Promise(resolve => {
-    let remaining = images.length;
-    const timer = setTimeout(resolve, 5000);
-    const finished = () => {
-      if (--remaining === 0) { clearTimeout(timer); resolve(); }
-    };
-    images.forEach(image => {
-      image.addEventListener('load', finished, { once: true });
-      image.addEventListener('error', finished, { once: true });
-    });
-  });
+function render(route, data) {
+  if (route.type === 'board') { document.title = 'make.fun bounties'; setupBoard(data); return; }
+  if (route.type === 'bounty') { document.title = `${data.title} | make.fun bounties`; app.innerHTML = views.bounty(data); return; }
+  if (route.type === 'profile') { document.title = `@${data.current} | make.fun bounties`; app.innerHTML = views.profile(data.current, data.profile, route.name); pages('sol', data.profile.solutions || [], SOL_PAGE, views.solutionRow, 'entries'); return; }
+  if (route.type === 'leaderboard') { document.title = `Leaderboard: ${data.competition?.title || route.name} | make.fun bounties`; app.innerHTML = views.leaderboard(route.name, data); const cols = (data.columns || []).filter(x => !x.hidden).sort((a, b) => (a.index ?? 0) - (b.index ?? 0)); pages('lb', [...(data.entries || []), ...(data.rest || [])], PAGE, row => views.lbRow(row, cols), 'rows'); return; }
+  document.title = 'Not found | make.fun bounties'; app.innerHTML = views.notFoundView('That route does not exist.');
 }
-
+function waitImages() { const pending = [...document.images].filter(x => !x.complete); if (!pending.length) return Promise.resolve(); return new Promise(resolve => { let left = pending.length, done = () => --left === 0 && resolve(); pending.forEach(x => { x.addEventListener('load', done, { once: true }); x.addEventListener('error', done, { once: true }); }); setTimeout(resolve, 5000); }); }
 async function navigate() {
-  const version = ++routeVersion;
-  window.__shotReady = false;
-  root.innerHTML = '<p>Loading…</p>';
-  try {
-    const route = resolveRoute();
-    const data = await loadRoute(route);
-    if (version !== routeVersion) return;
-    display(route, data);
-  } catch (failure) {
-    if (version !== routeVersion) return;
-    const missing = failure?.status === 404;
-    document.title = `${missing ? 'Not found' : 'Error'} | make.fun bounties`;
-    root.innerHTML = missing
-      ? view.notFoundView('That bounty, leaderboard or profile does not exist, or it is not public.')
-      : view.errorView(failure?.message || 'Could not load data from make.fun. Check your connection and try again.');
-  }
-  if (version !== routeVersion) return;
-  window.scrollTo(0, 0);
-  await waitForImages();
-  if (version === routeVersion) window.__shotReady = true;
+  const mine = ++version; window.__shotReady = false; app.innerHTML = '<p>Loading…</p>'; const route = parseRoute();
+  try { const data = await load(route); if (mine !== version) return; render(route, data); }
+  catch (error) { if (mine !== version) return; const missing = error?.status === 404; document.title = `${missing ? 'Not found' : 'Error'} | make.fun bounties`; app.innerHTML = missing ? views.notFoundView('That bounty, leaderboard or profile does not exist, or it is not public.') : views.errorView(error?.message || 'Could not load data from make.fun. Check your connection and try again.'); }
+  if (mine !== version) return; window.scrollTo(0, 0); await waitImages(); if (mine === version) window.__shotReady = true;
 }
-
-window.addEventListener('hashchange', navigate);
-navigate();
+window.addEventListener('hashchange', navigate); navigate();

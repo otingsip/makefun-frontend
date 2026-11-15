@@ -1,5 +1,9 @@
 # Handover — make.fun frontend bounty draft
 
+## Round 4 revision
+
+Reworked the view and formatting modules, reorganized the stylesheet, and refreshed the HTML shell. The four renderer surfaces retain the documented API behavior and stable hooks; verification for this revision is recorded separately.
+
 ## Revision check — 15 Nov 2026 (current workspace)
 
 - Fixed navigation races: an older request (including a failed request) can no

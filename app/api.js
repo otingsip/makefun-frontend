@@ -1,53 +1,32 @@
-const origin = 'https://make.fun/api';
-const responses = new Map();
-const segment = value => encodeURIComponent(value);
+const API_ROOT = 'https://make.fun/api';
+const cache = new Map();
+const enc = value => encodeURIComponent(value);
 
-async function request(resource) {
-  const address = origin + resource;
-  const saved = responses.get(address);
+async function read(path) {
+  const url = API_ROOT + path;
+  const old = cache.get(url);
   let response;
-  if (!saved?.tag) {
-    response = await fetch(address, { headers: {} });
-  } else {
-    try {
-      response = await fetch(address, { headers: { 'If-None-Match': saved.tag } });
-    } catch {
-      response = await fetch(address);
-    }
-  }
-  const finalURL = response.url || address;
-  if (saved && response.status === 304) return [saved.body, finalURL];
-  if (!response.ok) {
-    throw Object.assign(new Error(`make.fun API ${response.status} for ${resource}`), { status: response.status });
-  }
-  const body = await response.json();
-  const tag = response.headers.get('ETag');
-  if (tag) responses.set(address, { body, tag });
-  return [body, finalURL];
+  if (old) {
+    try { response = await fetch(url, { headers: { 'If-None-Match': old.etag } }); }
+    catch { response = await fetch(url); }
+  } else response = await fetch(url);
+  if (old && response.status === 304) return { value: old.value, url: response.url || url };
+  if (!response.ok) throw Object.assign(new Error(`make.fun API ${response.status} for ${path}`), { status: response.status });
+  const value = await response.json();
+  const etag = response.headers.get('ETag');
+  if (etag) cache.set(url, { etag, value });
+  return { value, url: response.url || url };
 }
 
-export async function getProfile(handle) {
-  const [profile, finalURL] = await request('/profiles/' + segment(handle));
-  let current = handle;
-  try {
-    const suffix = new URL(finalURL).pathname.match(/\/profiles\/(.+)$/);
-    if (suffix) current = decodeURIComponent(suffix[1]);
-  } catch {}
-  return { profile, current };
-}
-
+export async function getBounties() { return (await read('/competitions?status=open&activity=times')).value; }
+export async function getBounty(slug) { return (await read('/competitions/' + enc(slug) + '?submissions=summary')).value; }
 export async function getLeaderboard(slug, view) {
-  const suffix = view ? '&view=' + segment(view) : '';
-  const [body] = await request('/competitions/' + segment(slug) + '/leaderboard?rows=first' + suffix);
-  return body;
+  const path = '/competitions/' + enc(slug) + '/leaderboard?rows=first' + (view ? '&view=' + enc(view) : '');
+  return (await read(path)).value;
 }
-
-export async function getBounty(slug) {
-  const [body] = await request('/competitions/' + segment(slug) + '?submissions=summary');
-  return body;
-}
-
-export async function getBounties() {
-  const [body] = await request('/competitions?status=open&activity=times');
-  return body;
+export async function getProfile(handle) {
+  const result = await read('/profiles/' + enc(handle));
+  let current = handle;
+  try { const match = new URL(result.url).pathname.match(/\/profiles\/([^/]+)$/); if (match) current = decodeURIComponent(match[1]); } catch {}
+  return { profile: result.value, current };
 }
