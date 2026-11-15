@@ -1,5 +1,26 @@
 # Handover — make.fun frontend bounty draft
 
+## Revision check — 15 Nov 2026 (current workspace)
+
+- Fixed navigation races: an older request (including a failed request) can no
+  longer overwrite the current route or mark its screenshot readiness early.
+- Restored search/category/sort/status controls from the board's retained state
+  when returning, and prevented Enter in the filter form from reloading the app.
+- Unknown hash routes now show Not found rather than silently showing the board.
+- Verified all four renderers, filter restoration, form submission, stale success
+  and error responses, and unknown/malformed routes with synthetic API fixtures.
+  These checks do **not** constitute live API verification.
+- Live rechecking and screenshot recapture were blocked: requests through
+  `hatch-egress-proxy:3128` failed to connect; direct requests could not resolve
+  `make.fun`. The three existing screenshots were preserved, not recaptured.
+- Regenerated `out/dossier.json` with `MAKEFUN_OUTPUT_DIR=out node main.ts`.
+  First-load text assets: 34,895 raw bytes / 11,932 gzip-9 bytes (6 files).
+  No dependencies were added. The vendor file is unchanged (full SHA-256:
+  `4c8da1c8e76490b3a847670f49137d3ec23953e3c988fe6a6cb320fce5739240`).
+
+The remaining sections describe the earlier draft and its historical live checks,
+not a fresh validation of current make.fun data.
+
 Bounty: **"Build the best make.fun frontend"** (`makefun-frontend-01`) — $500 + entry
 fees (pot was $512.50 at 25 fee-payers when checked), 20 paid places, 1st $102.50.
 Opens **Sun 15 Nov 2026 19:30 WIB**, ends **Tue 17 Nov 2026 19:30 WIB** (48 h).

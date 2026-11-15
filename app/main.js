@@ -21,6 +21,7 @@ let boardItems = [];
 let boardState = { q: '', cat: 'all', sort: 'deadline', st: 'all' };
 let pageRows = null; // { rows, cols, shown } for the leaderboard "Show more" button
 let pageSols = null; // { sols, shown } for the profile "Show more" button
+let routeVersion = 0;
 
 function setReady() {
   window.__shotReady = true;
@@ -83,15 +84,22 @@ function renderBoardList() {
   }
 }
 
-async function renderBoard() {
-  document.title = 'make.fun bounties';
+async function renderBoard(version) {
   const data = await getBounties();
+  if (version !== routeVersion) return;
+  document.title = 'make.fun bounties';
   boardItems = data.items || [];
   const categories = [...new Set(boardItems.map((b) => b.category).filter(Boolean))].sort();
   app.innerHTML = boardShell(categories);
   const q = document.getElementById('q');
   const cat = document.getElementById('cat');
   const sort = document.getElementById('sort');
+  q.value = boardState.q;
+  cat.value = boardState.cat;
+  if (cat.value !== boardState.cat) cat.value = boardState.cat = 'all';
+  sort.value = boardState.sort;
+  document.querySelector(`input[name="st"][value="${boardState.st}"]`).checked = true;
+  document.getElementById('board-controls').addEventListener('submit', (ev) => ev.preventDefault());
   q.addEventListener('input', () => {
     boardState.q = q.value;
     renderBoardList();
@@ -111,14 +119,16 @@ async function renderBoard() {
   renderBoardList();
 }
 
-async function renderBounty(slug) {
+async function renderBounty(slug, version) {
   const b = await getBounty(slug);
+  if (version !== routeVersion) return;
   document.title = `${b.title} | make.fun bounties`;
   app.innerHTML = bounty(b);
 }
 
-async function renderLeaderboard(slug, view) {
+async function renderLeaderboard(slug, view, version) {
   const lb = await getLeaderboard(slug, view);
+  if (version !== routeVersion) return;
   document.title = `Leaderboard: ${lb.competition?.title || slug} | make.fun bounties`;
   app.innerHTML = leaderboard(slug, lb);
   const cols = (lb.columns || []).filter((c) => !c.hidden).sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
@@ -138,8 +148,9 @@ async function renderLeaderboard(slug, view) {
   }
 }
 
-async function renderProfile(handle) {
+async function renderProfile(handle, version) {
   const { profile: p, current } = await getProfile(handle);
+  if (version !== routeVersion) return;
   document.title = `@${current} | make.fun bounties`;
   app.innerHTML = profile(current, p, handle);
   const sols = Array.isArray(p.solutions) ? p.solutions : [];
@@ -159,6 +170,7 @@ async function renderProfile(handle) {
 }
 
 async function render() {
+  const version = ++routeVersion;
   window.__shotReady = false;
   pageRows = null;
   pageSols = null;
@@ -171,15 +183,19 @@ async function render() {
     const bMatch = pathPart.match(/^\/bounty\/([^/]+)$/);
     const pMatch = pathPart.match(/^\/(?:profile|u|account)\/([^/]+)$/);
     if (lbMatch) {
-      await renderLeaderboard(decodeURIComponent(lbMatch[1]), query.get('view'));
+      await renderLeaderboard(decodeURIComponent(lbMatch[1]), query.get('view'), version);
     } else if (bMatch) {
-      await renderBounty(decodeURIComponent(bMatch[1]));
+      await renderBounty(decodeURIComponent(bMatch[1]), version);
     } else if (pMatch) {
-      await renderProfile(decodeURIComponent(pMatch[1]));
+      await renderProfile(decodeURIComponent(pMatch[1]), version);
+    } else if (!pathPart || pathPart === '/') {
+      await renderBoard(version);
     } else {
-      await renderBoard();
+      document.title = 'Not found | make.fun bounties';
+      app.innerHTML = notFoundView('That route does not exist.');
     }
   } catch (err) {
+    if (version !== routeVersion) return;
     if (err && err.status === 404) {
       document.title = 'Not found | make.fun bounties';
       app.innerHTML = notFoundView('That bounty, leaderboard or profile does not exist, or it is not public.');
@@ -188,9 +204,10 @@ async function render() {
       app.innerHTML = errorView(err && err.message ? err.message : 'Could not load data from make.fun. Check your connection and try again.');
     }
   }
+  if (version !== routeVersion) return;
   window.scrollTo(0, 0);
   await waitForImages();
-  setReady();
+  if (version === routeVersion) setReady();
 }
 
 window.addEventListener('hashchange', render);
