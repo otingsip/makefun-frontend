@@ -1,32 +1,53 @@
-const API_ROOT = 'https://make.fun/api';
-const cache = new Map();
-const enc = value => encodeURIComponent(value);
+const origin = 'https://make.fun/api';
+const responses = new Map();
+const escapeSegment = encodeURIComponent;
 
-async function read(path) {
-  const url = API_ROOT + path;
-  const old = cache.get(url);
-  let response;
-  if (old) {
-    try { response = await fetch(url, { headers: { 'If-None-Match': old.etag } }); }
-    catch { response = await fetch(url); }
-  } else response = await fetch(url);
-  if (old && response.status === 304) return { value: old.value, url: response.url || url };
-  if (!response.ok) throw Object.assign(new Error(`make.fun API ${response.status} for ${path}`), { status: response.status });
-  const value = await response.json();
-  const etag = response.headers.get('ETag');
-  if (etag) cache.set(url, { etag, value });
-  return { value, url: response.url || url };
+async function request(resource) {
+  const address = origin + resource;
+  const saved = responses.get(address);
+  const plain = () => fetch(address);
+  let reply;
+  if (!saved) reply = await plain();
+  else {
+    try {
+      reply = await fetch(address, { headers: { 'If-None-Match': saved.tag } });
+    } catch {
+      reply = await plain();
+    }
+  }
+  const finalURL = reply.url || address;
+  if (reply.status === 304 && saved) return { body: saved.body, finalURL };
+  if (!reply.ok) {
+    const failure = new Error(`make.fun API ${reply.status} for ${resource}`);
+    failure.status = reply.status;
+    throw failure;
+  }
+  const body = await reply.json();
+  const tag = reply.headers.get('ETag');
+  if (tag) responses.set(address, { tag, body });
+  return { body, finalURL };
 }
 
-export async function getBounties() { return (await read('/competitions?status=open&activity=times')).value; }
-export async function getBounty(slug) { return (await read('/competitions/' + enc(slug) + '?submissions=summary')).value; }
-export async function getLeaderboard(slug, view) {
-  const path = '/competitions/' + enc(slug) + '/leaderboard?rows=first' + (view ? '&view=' + enc(view) : '');
-  return (await read(path)).value;
-}
 export async function getProfile(handle) {
-  const result = await read('/profiles/' + enc(handle));
+  const { body, finalURL } = await request(`/profiles/${escapeSegment(handle)}`);
   let current = handle;
-  try { const match = new URL(result.url).pathname.match(/\/profiles\/([^/]+)$/); if (match) current = decodeURIComponent(match[1]); } catch {}
-  return { profile: result.value, current };
+  try {
+    const segments = new URL(finalURL).pathname.match(/\/profiles\/([^/]+)$/);
+    if (segments) current = decodeURIComponent(segments[1]);
+  } catch { /* Keep the requested handle if the response URL is unusable. */ }
+  return { profile: body, current };
+}
+
+export async function getLeaderboard(slug, view) {
+  let resource = `/competitions/${escapeSegment(slug)}/leaderboard?rows=first`;
+  if (view) resource += `&view=${escapeSegment(view)}`;
+  return (await request(resource)).body;
+}
+
+export async function getBounty(slug) {
+  return (await request(`/competitions/${escapeSegment(slug)}?submissions=summary`)).body;
+}
+
+export async function getBounties() {
+  return (await request('/competitions?status=open&activity=times')).body;
 }
