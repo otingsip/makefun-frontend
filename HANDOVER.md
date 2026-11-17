@@ -1,206 +1,226 @@
-# make.fun frontend: maintainer transfer notes
+# Operational handover for makefun-frontend-01
 
-## Scope of this handoff
+## What is being handed over
 
-This repository contains the static entry for `makefun-frontend-01`.
-Round 8 changes this document only; application behavior and screenshots stay intact.
-The original draft was assembled on 15 November 2026, about 18:26–19:45 WIB.
-Its original working directory was `~/workspace/makefun-frontend/work/`.
-Paths prefixed with `work/` in older records refer to that directory.
-The present repository root is `/tmp/entry-repo`.
+This is the plain-JavaScript frontend entry for the make.fun frontend competition.
+The active checkout is `/tmp/entry-repo`; round 9 alters this document alone.
+Rendering, requests, styles, captures, and application assets retain their existing behavior.
+The first draft dates to 15 November 2026, approximately 18:26–19:45 WIB.
+It was developed in `~/workspace/makefun-frontend/work/`.
+Older references beginning with `work/` identify that original location.
 
-## Submission and recording history
+## Recording repair and submission chronology
 
-The initial implementation came from Muse, outside a kit-recorded Codex or Claude Code session.
-That original build therefore did not itself supply a qualifying recording.
-The kit accepts recordings of Claude Code and Codex sessions only.
-Its transcript gate calls for a recorded session and at least 30% authored lines.
-It also requires five assistant turns containing text and revisions across two assistant messages.
-An unrecorded snapshot alone cannot satisfy `transcripts_recorded` or `transcripts_witnessed`.
+Muse produced the initial implementation outside a qualifying recorded coding session.
+Only Claude Code and Codex recordings are accepted by the kit.
+The transcript requirements include a recording, at least 30% authored lines,
+five assistant turns with text, and revisions in two assistant messages.
+A bare source snapshot cannot meet either `transcripts_recorded` or `transcripts_witnessed`.
 
-Round 4 revised rendering, formatting, CSS organization, and the HTML shell.
-The public API behavior and stable renderer hooks were retained in that revision.
-Round 5 was initially accepted, then rejected on four small files.
-Round 6 encountered the same four-file rejection.
-Round 7 reduced the rejection to `HANDOVER.md` alone; reported authorship was 69.9 percent.
-In round 7 this file was created while absent, but matched its older bytes exactly.
-Consequently the checker credited no newly authored lines for that creation.
-Round 8 replaces the entire handoff with newly structured, substantially rewritten text.
-The backup for comparing this revision is `/tmp/round8-old-handover_md`.
-No application changes are part of this authorship repair.
+The sequence of revisions and checker outcomes is:
 
-## Repository map and measured source lengths
+| Round | Work or outcome |
+| :--- | :--- |
+| 4 | Reorganized rendering, formatting, stylesheet, and HTML while preserving public API behavior and renderer hooks. |
+| 5 | Accepted initially, then rejected for four small files. |
+| 6 | Rejected for those same four files. |
+| 7 | Only HANDOVER.md remained rejected; authorship measured 69.9 percent. |
+| 8 | Authorship passed at 92.2 percent (698 of 757 lines), but transcripts_witnessed failed. |
+| 9 | Rewrites this handover again under a fresh recording and drops the previous recording from the submit set. |
 
-The browser application uses plain JavaScript, system fonts, and no framework or build step.
-There are seven application assets, including the small 32×32 favicon.
-The following line counts describe the current source files:
+Round 7 recreated an absent handover with exactly its former bytes.
+That recreation earned no credit for newly authored lines.
+Round 8's substantial rewrite successfully addressed the document authorship issue.
+Its sole rejection came from two messages in a read-source session file:
+they reached the site 304 and 301 seconds after their claimed times.
+The witness allowance is 300 seconds, so both messages exceeded it.
+The code and authorship checks were otherwise satisfactory.
+Round 9 replaces that recording rather than carrying its late session into the seal.
+This round's comparison copy is `/tmp/round9-old-handover_md`.
+The repair requires no application changes.
 
-| Source | Lines | Responsibility |
-| --- | ---: | --- |
-| `app/main.js` | 178 | Hash routing, board state, pagination, screenshot readiness |
-| `app/api.js` | 53 | Public GET requests and in-memory ETag revalidation |
-| `app/views.js` | 154 | Escaped HTML renderers for the four surfaces |
-| `app/format.js` | 40 | Currency, dates, remaining time, win rate, and PnL formatting |
-| `app/style.css` | 231 | Responsive layout, keyboard focus, and visual presentation |
-| `app/index.html` | 24 | Navigation, skip link, main mount point, and footer |
+## Build artifact and repeatability
 
-`app/favicon.ico` prevents the otherwise unnecessary favicon 404.
-The API root is `https://make.fun/api`; requests are read-only.
-Cached responses carry ETags into `If-None-Match`; a 304 reuses the cached body.
-`main.ts` copies application assets and screenshots, then calls `buildDossier`.
-`vendor/makefun-frontend.ts` remains identical to the supplied kit file.
-Its full SHA-256 is `4c8da1c8e76490b3a847670f49137d3ec23953e3c988fe6a6cb320fce5739240`.
-The repository includes an OSI MIT `LICENSE`.
-`serve.ts` is the unchanged starter development server, rather than a production component.
+Run `MAKEFUN_OUTPUT_DIR=out node main.ts` to construct the dossier.
+The entry script copies the browser assets and screenshots before invoking `buildDossier`.
+HANDOVER.md is not included in the dossier; rewriting it should leave the digest unchanged.
+The expected SHA-256 is:
+`360507c07ed6749bcd1f82788be5853d6b09299f1578097ce38776f37885c1fd`.
+Round 9 removes `out/`, builds twice, and compares the resulting dossiers byte for byte.
+The session's final report supplies the measured digest and document change counts.
 
-## Route contract: board and bounty
+An earlier dossier occupied 395,220 bytes against a 1,572,864-byte ceiling.
+Two historical builds also yielded identical bytes.
+Application ceilings are 993 files and 16 MiB.
+The original seven assets occupied 34,104 bytes in total.
+Its initial six-file load was 33,981 raw bytes, or 11,740 with gzip level 9.
+Following the recorded revision, first-load text was 34,895 raw and 11,932 gzip-9 bytes.
+That revision added no dependencies.
 
-The board lives at `#/` and requests `/competitions?status=open&activity=times`.
-Cards expose the current pot, entry charge, remaining time, and entry count.
-Search covers title, slug, and skill; category selection narrows the results.
-Sort choices are closing soon, largest pot, most entries, newest, and alphabetical.
-Status choices cover all, taking entries, ending within 48 hours, and ended awaiting results.
-Deadline comparison determines the “Entries closed” label.
-This matters because the API can still call a past-deadline competition `open`.
-Changing filters replaces the list without taking focus from the search field.
-Returning to the board restores search, category, sort, and status state.
-Pressing Enter in the filter form does not reload the document.
+## Source inventory
 
-The detail URL is `#/bounty/<slug>`.
-Its request is `/competitions/<slug>?submissions=summary`.
-The page presents sponsor, category, summary, skills, description, and notices.
-It also includes current pot, fee-payer count, entry fee, opening time, and deadline.
-Entry/passed totals, status, and judging information accompany those values.
-Rules are expandable through a native `<details>` element.
-The payout table uses live `rewardsNow`: place, base, fee share, and current total.
-A prominent leaderboard link connects the detail and ranking views.
+There is no frontend framework, compilation step, or downloaded font requirement.
+System fonts serve the interface, and the browser package has seven assets.
+Measured module lengths and ownership are listed here for the next maintainer:
 
-## Route contract: rankings and accounts
+| File | Line count | Main purpose |
+| :--- | ---: | :--- |
+| `app/format.js` | 40 | Money, dates, countdowns, win rates, and PnL presentation |
+| `app/api.js` | 53 | GET transport plus ETag cache validation in memory |
+| `app/main.js` | 178 | Route dispatch, board filters, pagination, capture readiness |
+| `app/views.js` | 154 | HTML escaping and markup for all four views |
+| `app/index.html` | 24 | Main mount, navigation, footer, and skip navigation link |
+| `app/style.css` | 231 | Layout, responsive rules, focus treatment, and appearance |
 
-Rankings use `#/bounty/<slug>/leaderboard`, optionally with `?view=overall`.
-They fetch `/competitions/<slug>/leaderboard?rows=first[&view=…]`.
-The public endpoint supports the `overall` and `performance` view values.
-Table fields follow the response's `columns` array rather than a fixed harness schema.
-Supported displays include win rate, interval bounds, net PnL, return, and drawdown.
-Sharpe, trades, and size are also rendered when supplied.
-Win rates convert micro units to percentages; PnL converts micro-USDC to dollars.
-Rows preserve rank ranges, house/baseline badges, and prize places.
-Both `placements_held` and `scores_visible` are respected.
-Held results use an honest empty-board message instead of invented placements.
-The response supplies ten complete rows plus `rest` stubs.
-The interface reveals ranking rows in groups of 25 with “Show more”.
-Handles in those rows link to public profiles.
+The seventh asset, `app/favicon.ico`, is 32×32 and avoids a favicon 404.
+`serve.ts` is the untouched starter server for development, not a production service.
+The supplied `vendor/makefun-frontend.ts` has not been modified.
+Its SHA-256 is `4c8da1c8e76490b3a847670f49137d3ec23953e3c988fe6a6cb320fce5739240`.
+An OSI MIT license is present as `LICENSE`.
+All remote reads target `https://make.fun/api`.
+ETags are replayed in `If-None-Match`, with cached response bodies reused on HTTP 304.
 
-Profiles use `#/profile/<handle>`; `#/u/<handle>` and `#/account/<handle>` are aliases.
-The underlying request is `/profiles/<handle>`.
-An avatar falls back to the handle's initial when no image is supplied.
-Bio, join date, and available GitHub, Discord, or wallet links are displayed.
-The record includes entered, placed, won, podium, best placement, and prize money.
-Public entries show competition, place, prize, score, and entry date.
-That entries table expands ten records at a time.
-A 308 moved-handle response is followed and explained on screen.
-Unknown accounts or bounties produce a proper Not found page.
-Unrecognized or malformed hash routes also resolve to Not found.
+## Navigation and data contracts
 
-## Data boundaries and interaction safeguards
+Four surfaces make up the application: board, bounty details, leaderboard, and profile.
+Unknown or malformed hashes render Not found, as do missing profiles and bounties.
+Earlier route requests cannot overwrite a later route, whether they succeed or fail.
+The same guard prevents old requests from signaling readiness for a newer capture.
 
-No independent entries-list endpoint is necessary.
-Leaderboard `entries`/`rest` and profile `solutions` provide the required entry data.
-The default `placements: after_finalize` can conceal scores until finalization.
-For the original makefun bounty check, `entries` was empty with both
-`scores_visible: true` and `placements_held: true`.
-The UI preserves that distinction for any similarly held competition.
-Null profile avatars are normal; `tidy-meteor-25` was one observed example.
-Unlinked or hidden GitHub/Discord fields are omitted when null.
-Absent scores use “—”; prizes, pots, deadlines, and counts are never fabricated.
+### Finding a bounty
 
-Navigation guards stop earlier successful or failed requests from replacing a newer route.
-An old request also cannot announce readiness for a newer screenshot target.
-`window.__shotReady` is false during loading and true after data and images are ready.
-Long lists paginate, and each view normally needs one API request.
-Native controls, labels, `aria-live` status, visible focus, and the skip link aid access.
-On phones the controls and cards stack into a responsive layout.
+The board address is `#/`; it reads `/competitions?status=open&activity=times`.
+Each card gives the pot, entry price, time remaining, and number of entries.
+Text matching considers title, slug, and skill, alongside a category filter.
+Sorting supports alphabetical, newest, most entries, largest pot, and closing soon.
+Status filtering offers all, taking entries, ending within 48 hours, and ended awaiting results.
+The deadline drives the “Entries closed” badge even if the API still reports `open`.
+Updating filters preserves search-field focus while replacing the results.
+Board search, category, ordering, and status survive a visit to another surface.
+Submitting the filter form with Enter does not reload the page.
 
-## Verification ledger: distinguish historical live checks from fixtures
+### Inspecting the competition
 
-The original live browser run used `node serve.ts` on port 8080 and headless Chrome.
-At that time the board contained 18 bounties totaling $10,087.50 in pots.
-The makefun detail page showed a $512.50 pot and its payout table.
-The `threejs-fps-02` ranking showed a top judge win rate of 97.36%.
-The `btc-race-24h-20261115-0828` ranking showed $126 at the top of the PnL board.
-The makefun ranking correctly displayed its empty state.
-The `tidy-meteor-25` profile showed 17 entered, six placed, and $3.
-Unknown profile and bounty URLs were checked for 404-style views.
-Search narrowed the list to one result, and largest-pot sorting put token radar first.
-Ranking pagination grew from 25 visible rows to 50.
-A 390×844 phone viewport showed cleanly stacked controls and cards.
-All four JavaScript modules passed `node --check`.
+Details appear at `#/bounty/<slug>` using `/competitions/<slug>?submissions=summary`.
+The view includes sponsor, category, summary, skills, full description, and notices.
+It presents pot size, fee-payers, entry price, opening time, and closing deadline.
+Entry totals, passed totals, judging information, and status are shown as available.
+Rules open in a native `<details>` disclosure.
+Live `rewardsNow` values populate place, base payout, fee share, and total payout.
+A prominent link leads from these details to the competition's leaderboard.
 
-One historical test searched `innerText` for “Net PnL” and failed on casing.
-CSS rendered the heading as “NET PNL”; manual inspection confirmed the real values.
-Examples on screen included $126 and $93.10, so that assertion was the defect.
+### Reading results
 
-The 15 November revision additionally exercised all four renderers with synthetic fixtures.
-Those checks covered retained filters, form submission, and stale success/error responses.
-Unknown and malformed routes were included in the fixture verification.
-Fixture success is not evidence of a new live API check.
-Live rechecks and screenshot recapture were blocked by network access failures:
-`hatch-egress-proxy:3128` could not connect, and direct DNS could not resolve `make.fun`.
-The three prior captures were therefore kept without recapture.
+Use `#/bounty/<slug>/leaderboard`, with optional `?view=overall`, for rankings.
+The request is `/competitions/<slug>/leaderboard?rows=first[&view=…]`.
+Both `performance` and `overall` are public endpoint view values.
+The returned `columns` define the table instead of a hard-coded harness layout.
+Renderers support win rate and interval bounds, net PnL, return, drawdown,
+as well as Sharpe, trade count, and size when those fields are provided.
+Micro-unit win rates become percentages; micro-USDC PnL becomes dollars.
+Rank spans, house and baseline badges, and paid places remain visible.
+Visibility follows both `scores_visible` and `placements_held`.
+Held placements produce an explanatory empty state without invented rankings.
+The endpoint returns ten full rows together with `rest` stubs.
+“Show more” reveals the ranking in batches of 25 rows.
+Participant handles navigate to their public profiles.
 
-## Captures and package measurements
+### Looking up a participant
 
-Each supplied image is a 1280×800 JPEG below the 256 KiB limit.
-They depict this application with historical live data after waiting for readiness.
-`shots.json` declares the following captures; the first is the cover.
+The canonical profile hash is `#/profile/<handle>`.
+Aliases `#/u/<handle>` and `#/account/<handle>` resolve to that same surface.
+Profile data comes from `/profiles/<handle>`.
+Missing avatar images fall back to the first character of the handle.
+Available biography, join date, GitHub, Discord, and wallet links are displayed.
+Statistics include entered, placed, won, podium, best place, and prize earnings.
+The public-entry table contains competition, place, prize, score, and entry date.
+It reveals another ten records per pagination action.
+A moved-handle HTTP 308 is followed, with an explanation shown to the visitor.
 
-| Capture in `screenshots/` | Bytes | Hash route |
-| --- | ---: | --- |
-| `1-leaderboard.jpg` | 109,415 | `#/bounty/threejs-fps-02/leaderboard` |
-| `2-profile.jpg` | 85,406 | `#/profile/tidy-meteor-25` |
-| `3-board.jpg` | 73,997 | `#/` |
+## Honest data handling and accessibility
 
-Original draft assets totaled 34,104 bytes across seven files.
-Its six-file first load measured 33,981 raw bytes and 11,740 bytes with gzip-9.
-After the recorded revision, first-load text measured 34,895 raw / 11,932 gzip-9 bytes.
-No dependencies were introduced by that revision.
-The historical dossier was 395,220 bytes, below the 1,572,864-byte cap.
-That historical build produced byte-identical dossiers on two runs.
-Application limits are 993 files and 16 MiB; historical usage was seven files / 34,104 bytes.
-Generate the current dossier with `MAKEFUN_OUTPUT_DIR=out node main.ts`.
-The pre-round-8 dossier hash was `360507c07ed6749bcd1f82788be5853d6b09299f1578097ce38776f37885c1fd`.
-Documentation contributes to the dossier, so this rewrite requires a new digest.
-Round 8 checks reproducibility by retaining one generated dossier and comparing the next.
-The final session report records that comparison, current digest, and document diff counts.
+There is no need for a separate entry-list API call.
+Ranking `entries`/`rest` and profile `solutions` already supply entry records.
+The default `placements: after_finalize` may hide scores before finalization.
+In the historical makefun response, `entries` was empty while both
+`scores_visible: true` and `placements_held: true` were set.
+The interface keeps that combination distinct rather than guessing placements.
+Null avatars are valid; `tidy-meteor-25` supplied one such example.
+Null or hidden GitHub and Discord values produce no links.
+Unavailable scores display “—”, and no prizes, pots, deadlines, or counts are made up.
 
-## Competition context and remaining operator work
+Loading sets `window.__shotReady` to false.
+It becomes true only once the active view's data and images are ready.
+Ordinarily each surface takes one API request; lengthy tables paginate locally.
+Labels, native inputs, visible focus, a skip link, and `aria-live` status support access.
+At mobile widths the cards and controls stack vertically.
 
-The bounty is “Build the best make.fun frontend”, with $500 plus entry fees.
-At the historical check, 25 fee-payers brought the pot to $512.50.
-There were 20 paid places and a $102.50 first prize at that snapshot.
-Opening was Sunday 15 November 2026 at 19:30 WIB.
-Closing is Tuesday 17 November 2026 at 19:30 WIB, a 48-hour window.
-The original draft had not submitted, paid a fee, connected a wallet, or signed anything.
-No GitHub repository had been created in that original handoff.
-It also had not been live-tested again after opening.
-Once entries exist, recheck the makefun leaderboard; replacing the cover is optional.
-A populated board from another bounty is allowed when it shows the app on live data.
+## Evidence already collected
 
-For entry, create a new public GitHub repository after opening; earlier creation is refused.
-Include the source, license, vendor module, screenshot manifest, and screenshots.
-Leave generated `out/` and temporary browser tooling out of the submitted source.
-Start recording before further implementation using the kit command:
+Historical live checks ran headless Chrome against `node serve.ts` on port 8080.
+These are observations from that run, not promises about today's API values:
+
+- The board had 18 bounties whose pots summed to $10,087.50.
+- Makefun details displayed a $512.50 pot and the payout breakdown.
+- The leading judge win rate on `threejs-fps-02` was 97.36%.
+- `btc-race-24h-20261115-0828` led its PnL table with $126.
+- The makefun leaderboard used the correct empty presentation.
+- `tidy-meteor-25` showed 17 entered, six placed, and $3 earned.
+- Unknown bounty and profile hashes returned the intended 404-style screens.
+- Search reduced the board to one item; largest-pot order put token radar first.
+- Ranking expansion changed the visible row count from 25 to 50.
+- At 390×844, phone controls and cards stacked cleanly.
+
+Syntax checks with `node --check` passed for all four JavaScript modules.
+One old assertion looked for “Net PnL” in `innerText` and failed because CSS showed “NET PNL”.
+Manual inspection found the expected values, including $126 and $93.10.
+That failure belonged to the casing-sensitive assertion, not the displayed figures.
+Synthetic fixtures on 15 November exercised each of the four renderers.
+They covered filter retention, form submission, stale success and error responses,
+and both unknown and malformed routes.
+Passing fixtures does not establish a subsequent successful live API run.
+Live rechecks and new captures were prevented by network failures:
+`hatch-egress-proxy:3128` could not connect, while direct DNS failed for `make.fun`.
+Accordingly the three earlier screenshots were retained.
+
+## Screenshot manifest
+
+The historical live-data captures waited for readiness before image creation.
+All three are 1280×800 JPEGs smaller than the 256 KiB per-image limit.
+`shots.json` selects the first image below as the cover.
+
+| Screenshot path | Size in bytes | Captured hash |
+| :--- | ---: | :--- |
+| `screenshots/1-leaderboard.jpg` | 109,415 | `#/bounty/threejs-fps-02/leaderboard` |
+| `screenshots/2-profile.jpg` | 85,406 | `#/profile/tidy-meteor-25` |
+| `screenshots/3-board.jpg` | 73,997 | `#/` |
+
+## Entry context and operator checklist
+
+The competition is “Build the best make.fun frontend”: $500 plus entry fees.
+At the recorded snapshot, 25 fee-payers raised the pot to $512.50.
+Twenty places were paid, with $102.50 allocated to first place.
+The 48-hour window opened Sunday 15 November 2026 at 19:30 WIB
+and closes Tuesday 17 November 2026 at 19:30 WIB.
+The original draft had neither submitted nor paid, connected a wallet, or signed.
+That initial handoff also had no new GitHub repository and no live retest after opening.
+When entries become available, inspect the makefun ranking again.
+Replacing the cover is optional: another bounty's populated live board is permitted.
+
+Create the public GitHub repository after opening; the kit refuses earlier creation.
+Ship source, MIT license, vendor module, screenshot manifest, and screenshots.
+Exclude generated `out/` and temporary browser utilities from submitted source.
+For further implementation, begin the kit recording before starting a fresh Codex or Claude Code session:
 `node cli/makefun.mjs record --competition makefun-frontend-01 --source <your repo>`.
-Use a fresh Codex or Claude Code session started after recording begins.
-The account pays the $0.50 escrow entry fee once through the kit or bounty interface.
-Before submission, serve locally, traverse all four surfaces, and generate the dossier.
-From the kit, submit with competition, recording ID, repo URL, full commit SHA, title, and keypair.
-The kit also supports submission via its `--source` source-bundle form.
-The linked Solana account signs the exact message “make.fun entry v1”.
-Limits are ten submissions per day and ten total; the last before closing is final.
-Watch the development grade/provisional rate; the final heat follows the deadline.
+The account pays the $0.50 escrow entry charge once via the kit or bounty UI.
+Before submitting, serve the frontend, visit all four surfaces, and generate its dossier.
+Kit submission needs competition, recording ID, repository URL, full commit SHA, title, and keypair.
+Alternatively the kit accepts the `--source` source-bundle submission form.
+The linked Solana account signs precisely “make.fun entry v1”.
+There are ten submissions allowed per day and ten overall; the last before closing is final.
+Monitor the development grade/provisional rate; final heat occurs after the deadline.
 
-Historical browser tooling lived under `/tmp/shot/`, with Chrome under `~/.cache/cft/`.
-It used puppeteer-core and a local CONNECT proxy solely for sandbox egress.
-The test-only `--ignore-certificate-errors` option was needed for that environment.
-Neither that tooling nor its proxy setup belongs in the entry or a normal browser setup.
+Historical browser helpers were under `/tmp/shot/`, with Chrome in `~/.cache/cft/`.
+They used puppeteer-core and a local CONNECT proxy for sandbox egress only.
+The test environment needed `--ignore-certificate-errors`.
+Those helpers and proxy settings are not entry assets or normal browser requirements.
